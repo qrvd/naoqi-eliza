@@ -1,0 +1,488 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheProject xmlns="http://www.aldebaran-robotics.com/schema/choregraphe/project.xsd" xar_version="3">
+    <Box name="root" id="-1" localization="8" tooltip="Root box of Choregraphe&apos;s behavior. Highest level possible." x="0" y="0">
+        <bitmap>media/images/box/root.png</bitmap>
+        <script language="4">
+            <content>
+                <![CDATA[]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+        <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+        <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="4" />
+        <Timeline enable="0">
+            <BehaviorLayer name="behavior_layer1">
+                <BehaviorKeyframe name="keyframe1" index="1">
+                    <Diagram>
+                        <Box name="Say Text" id="3" localization="8" tooltip="Say the text received on its input." x="237" y="26">
+                            <bitmap>media/images/box/interaction/say.png</bitmap>
+                            <script language="4">
+                                <content>
+                                    <![CDATA[import time
+
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self, False)
+        self.tts = ALProxy('ALTextToSpeech')
+        self.ttsStop = ALProxy('ALTextToSpeech', True) #Create another proxy as wait is blocking if audioout is remote
+
+    def onLoad(self):
+        self.bIsRunning = False
+        self.ids = []
+
+    def onUnload(self):
+        for id in self.ids:
+            try:
+                self.ttsStop.stop(id)
+            except:
+                pass
+        while( self.bIsRunning ):
+            time.sleep( 0.2 )
+
+    def onInput_onStart(self, p):
+        self.bIsRunning = True
+        try:
+            sentence = "\RSPD="+ str( self.getParameter("Speed (%)") ) + "\ "
+            sentence += "\VCT="+ str( self.getParameter("Voice shaping (%)") ) + "\ "
+            sentence += str(p)
+            sentence +=  "\RST\ "
+            id = self.tts.post.say(str(sentence))
+            self.ids.append(id)
+            self.tts.wait(id, 0)
+        finally:
+            try:
+                self.ids.remove(id)
+            except:
+                pass
+            if( self.ids == [] ):
+                self.onStopped() # activate output of the box
+                self.bIsRunning = False
+
+    def onInput_onStop(self):
+        self.onUnload()]]>
+</content>
+                            </script>
+                            <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when Diagram is loaded." id="1" />
+                            <Input name="onStart" type="3" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this Input." id="2" />
+                            <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this Input." id="3" />
+                            <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when Box behavior is finished." id="4" />
+                            <Parameter name="Voice shaping (%)" inherits_from_parent="1" content_type="1" value="100" default_value="100" min="50" max="150" tooltip='Used to modify at runtime the voice feature (tone, speed). In a slighty&#x0A;different way than pitch and speed, it gives a kind of &quot;gender or age&#x0A;modification&quot; effect.&#x0A;&#x0A;For instance, a quite good male derivation of female voice can be&#x0A;obtained setting this parameter to 78%.&#x0A;&#x0A;Note: For a better effect, you can compensate this parameter with the&#x0A;speed parameter. For example, if you want to decrease by 20% the voice&#x0A;shaping, you will have to increase by 20% the speed to keep a constant&#x0A;average speed.' id="5" />
+                            <Parameter name="Speed (%)" inherits_from_parent="1" content_type="1" value="100" default_value="100" min="50" max="200" tooltip="Changes the speed of the voice.&#x0A;&#x0A;Note: For a better effect, you can compensate this parameter with the voice&#x0A;shaping parameter. For example, if you want to increase by 20% the speed, you&#x0A;will have to decrease by 20% the voice shaping to keep a constant average&#x0A;speed." id="6" />
+                            <Resource name="Speech" type="Lock" timeout="0" />
+                        </Box>
+                        <Box name="Python Script" id="1" localization="8" tooltip="This box contains a basic python script and can be used to create any python script box you would like.&#x0A;&#x0A;To edit its script, double-click on it." x="341" y="205">
+                            <bitmap>media/images/box/box-python-script.png</bitmap>
+                            <script language="4">
+                                <content>
+                                    <![CDATA[#----------------------------------------------------------------------
+#  eliza.py
+#
+#  a cheezy little Eliza knock-off by Joe Strout
+#  with some updates by Jeff Epler
+#  hacked into a module and updated by Jez Higgins
+#----------------------------------------------------------------------
+
+import string
+import re
+import random
+
+class eliza(object):
+  def __init__(self):
+    self.keys = list(map(lambda x:re.compile(x[0], re.IGNORECASE),gPats))
+    self.values = list(map(lambda x:x[1],gPats))
+
+  #----------------------------------------------------------------------
+  # translate: take a string, replace any words found in dict.keys()
+  #  with the corresponding dict.values()
+  #----------------------------------------------------------------------
+  def translate(self,str,dict):
+    words = str.lower().split()
+    keys = dict.keys();
+    for i in range(0,len(words)):
+      if words[i] in keys:
+        words[i] = dict[words[i]]
+    return ' '.join(words)
+
+  #----------------------------------------------------------------------
+  #  respond: take a string, a set of regexps, and a corresponding
+  #    set of response lists; find a match, and return a randomly
+  #    chosen response from the corresponding list.
+  #----------------------------------------------------------------------
+  def respond(self,str):
+    # find a match among keys
+    for i in range(0, len(self.keys)):
+      match = self.keys[i].match(str)
+      if match:
+        # found a match ... stuff with corresponding value
+        # chosen randomly from among the available options
+        resp = random.choice(self.values[i])
+        # we've got a response... stuff in reflected text where indicated
+        pos = resp.find('%')
+        while pos > -1:
+          num = int(resp[pos+1:pos+2])
+          resp = resp[:pos] + \
+            self.translate(match.group(num),gReflections) + \
+            resp[pos+2:]
+          pos = resp.find('%')
+        # fix munged punctuation at the end
+        if resp[-2:] == '?.': resp = resp[:-2] + '.'
+        if resp[-2:] == '??': resp = resp[:-2] + '?'
+        return resp
+
+#----------------------------------------------------------------------
+# gReflections, a translation table used to convert things you say
+#    into things the computer says back, e.g. "I am" --> "you are"
+#----------------------------------------------------------------------
+gReflections = {
+  "am"   : "are",
+  "was"  : "were",
+  "i"    : "you",
+  "i'd"  : "you would",
+  "i've"  : "you have",
+  "i'll"  : "you will",
+  "my"  : "your",
+  "are"  : "am",
+  "you've": "I have",
+  "you'll": "I will",
+  "your"  : "my",
+  "yours"  : "mine",
+  "you"  : "me",
+  "me"  : "you"
+}
+
+#----------------------------------------------------------------------
+# gPats, the main response table.  Each element of the list is a
+#  two-element list; the first is a regexp, and the second is a
+#  list of possible responses, with group-macros labelled as
+#  %1, %2, etc.
+#----------------------------------------------------------------------
+gPats = [
+  [r'I need (.*)',
+  [  "Why do you need %1?",
+    "Would it really help you to get %1?",
+    "Are you sure you need %1?"]],
+
+  [r'Why don\'?t you ([^\?]*)\??',
+  [  "Do you really think I don't %1?",
+    "Perhaps eventually I will %1.",
+    "Do you really want me to %1?"]],
+
+  [r'Why can\'?t I ([^\?]*)\??',
+  [  "Do you think you should be able to %1?",
+    "If you could %1, what would you do?",
+    "I don't know -- why can't you %1?",
+    "Have you really tried?"]],
+
+  [r'I can\'?t (.*)',
+  [  "How do you know you can't %1?",
+    "Perhaps you could %1 if you tried.",
+    "What would it take for you to %1?"]],
+
+  [r'I am (.*)',
+  [  "Did you come to me because you are %1?",
+    "How long have you been %1?",
+    "How do you feel about being %1?"]],
+
+  [r'I\'?m (.*)',
+  [  "How does being %1 make you feel?",
+    "Do you enjoy being %1?",
+    "Why do you tell me you're %1?",
+    "Why do you think you're %1?"]],
+
+  [r'Are you ([^\?]*)\??',
+  [  "Why does it matter whether I am %1?",
+    "Would you prefer it if I were not %1?",
+    "Perhaps you believe I am %1.",
+    "I may be %1 -- what do you think?"]],
+
+  [r'What (.*)',
+  [  "Why do you ask?",
+    "How would an answer to that help you?",
+    "What do you think?"]],
+
+  [r'How (.*)',
+  [  "How do you suppose?",
+    "Perhaps you can answer your own question.",
+    "What is it you're really asking?"]],
+
+  [r'Because (.*)',
+  [  "Is that the real reason?",
+    "What other reasons come to mind?",
+    "Does that reason apply to anything else?",
+    "If %1, what else must be true?"]],
+
+  [r'(.*) sorry (.*)',
+  [  "There are many times when no apology is needed.",
+    "What feelings do you have when you apologize?"]],
+
+  [r'Hello(.*)',
+  [  "Hello... I'm glad you could drop by today.",
+    "Hi there... how are you today?",
+    "Hello, how are you feeling today?"]],
+
+  [r'I think (.*)',
+  [  "Do you doubt %1?",
+    "Do you really think so?",
+    "But you're not sure %1?"]],
+
+  [r'(.*) friend (.*)',
+  [  "Tell me more about your friends.",
+    "When you think of a friend, what comes to mind?",
+    "Why don't you tell me about a childhood friend?"]],
+
+  [r'Yes',
+  [  "You seem quite sure.",
+    "OK, but can you elaborate a bit?"]],
+
+  [r'(.*) computer(.*)',
+  [  "Are you really talking about me?",
+    "Does it seem strange to talk to a computer?",
+    "How do computers make you feel?",
+    "Do you feel threatened by computers?"]],
+
+  [r'Is it (.*)',
+  [  "Do you think it is %1?",
+    "Perhaps it's %1 -- what do you think?",
+    "If it were %1, what would you do?",
+    "It could well be that %1."]],
+
+  [r'It is (.*)',
+  [  "You seem very certain.",
+    "If I told you that it probably isn't %1, what would you feel?"]],
+
+  [r'Can you ([^\?]*)\??',
+  [  "What makes you think I can't %1?",
+    "If I could %1, then what?",
+    "Why do you ask if I can %1?"]],
+
+  [r'Can I ([^\?]*)\??',
+  [  "Perhaps you don't want to %1.",
+    "Do you want to be able to %1?",
+    "If you could %1, would you?"]],
+
+  [r'You are (.*)',
+  [  "Why do you think I am %1?",
+    "Does it please you to think that I'm %1?",
+    "Perhaps you would like me to be %1.",
+    "Perhaps you're really talking about yourself?"]],
+
+  [r'You\'?re (.*)',
+  [  "Why do you say I am %1?",
+    "Why do you think I am %1?",
+    "Are we talking about you, or me?"]],
+
+  [r'I don\'?t (.*)',
+  [  "Don't you really %1?",
+    "Why don't you %1?",
+    "Do you want to %1?"]],
+
+  [r'I feel (.*)',
+  [  "Good, tell me more about these feelings.",
+    "Do you often feel %1?",
+    "When do you usually feel %1?",
+    "When you feel %1, what do you do?"]],
+
+  [r'I have (.*)',
+  [  "Why do you tell me that you've %1?",
+    "Have you really %1?",
+    "Now that you have %1, what will you do next?"]],
+
+  [r'I would (.*)',
+  [  "Could you explain why you would %1?",
+    "Why would you %1?",
+    "Who else knows that you would %1?"]],
+
+  [r'Is there (.*)',
+  [  "Do you think there is %1?",
+    "It's likely that there is %1.",
+    "Would you like there to be %1?"]],
+
+  [r'My (.*)',
+  [  "I see, your %1.",
+    "Why do you say that your %1?",
+    "When your %1, how do you feel?"]],
+
+  [r'You (.*)',
+  [  "We should be discussing you, not me.",
+    "Why do you say that about me?",
+    "Why do you care whether I %1?"]],
+
+  [r'Why (.*)',
+  [  "Why don't you tell me the reason why %1?",
+    "Why do you think %1?" ]],
+
+  [r'I want (.*)',
+  [  "What would it mean to you if you got %1?",
+    "Why do you want %1?",
+    "What would you do if you got %1?",
+    "If you got %1, then what would you do?"]],
+
+  [r'(.*) mother(.*)',
+  [  "Tell me more about your mother.",
+    "What was your relationship with your mother like?",
+    "How do you feel about your mother?",
+    "How does this relate to your feelings today?",
+    "Good family relations are important."]],
+
+  [r'(.*) father(.*)',
+  [  "Tell me more about your father.",
+    "How did your father make you feel?",
+    "How do you feel about your father?",
+    "Does your relationship with your father relate to your feelings today?",
+    "Do you have trouble showing affection with your family?"]],
+
+  [r'(.*) child(.*)',
+  [  "Did you have close friends as a child?",
+    "What is your favorite childhood memory?",
+    "Do you remember any dreams or nightmares from childhood?",
+    "Did the other children sometimes tease you?",
+    "How do you think your childhood experiences relate to your feelings today?"]],
+
+  [r'(.*)\?',
+  [  "Why do you ask that?",
+    "Please consider whether you can answer your own question.",
+    "Perhaps the answer lies within yourself?",
+    "Why don't you tell me?"]],
+
+  [r'quit',
+  [  "Thank you for talking with me.",
+    "Good-bye.",
+    "Thank you, that will be $150.  Have a good day!"]],
+
+  [r'(.*)',
+  [  "Please tell me more.",
+    "Let's change focus a bit... Tell me about your family.",
+    "Can you elaborate on that?",
+    "Why do you say that %1?",
+    "I see.",
+    "Very interesting.",
+    "%1.",
+    "I see.  And what does that tell you?",
+    "How does that make you feel?",
+    "How do you feel when you say that?"]]
+  ]
+
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onLoad(self):
+        self.eliza = eliza()
+        pass
+
+    def onUnload(self):
+        #put clean-up code here
+        pass
+
+    def onInput_onQuestion(self, string):
+        therapist = eliza()
+        r = therapist.respond(string)
+        print r
+        self.onRespond(r) #activate the output of the box
+
+    def onInput_onStop(self):
+        self.onUnload() #it is recommended to reuse the clean-up as the box is stopped
+        self.onRespond(p) #activate the output of the box]]>
+</content>
+                            </script>
+                            <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                            <Input name="onQuestion" type="3" type_size="1" nature="2" inner="0" tooltip="what you tell eliza" id="2" />
+                            <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                            <Output name="onRespond" type="3" type_size="1" nature="1" inner="0" tooltip="what eliza said" id="4" />
+                        </Box>
+                        <Box name="Speech Reco." id="4" localization="8" tooltip="Recognize a word from a list of words set in the box parameters.&#x0A;&#x0A;V1.1.0&#x0A;" x="172" y="174">
+                            <bitmap>media/images/box/interaction/ear.png</bitmap>
+                            <script language="4">
+                                <content>
+                                    <![CDATA[
+
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self, False)
+        try:
+            self.asr = ALProxy("ALSpeechRecognition")
+        except Exception as e:
+            self.asr = None
+            self.logger.error(e)
+        self.memory = ALProxy("ALMemory")
+
+    def onLoad(self):
+        from threading import Lock
+        self.bIsRunning = False
+        self.mutex = Lock()
+        self.hasPushed = False
+        self.hasSubscribed = False
+        self.BIND_PYTHON(self.getName(), "onWordRecognized")
+
+    def onUnload(self):
+        from threading import Lock
+        self.mutex.acquire()
+        try:
+            if (self.bIsRunning):
+                if (self.hasSubscribed):
+                    self.memory.unsubscribeToEvent("WordRecognized", self.getName())
+                if (self.hasPushed and self.asr):
+                    self.asr.popContexts()
+        except RuntimeError, e:
+            self.mutex.release()
+            raise e
+        self.bIsRunning = False;
+        self.mutex.release()
+
+    def onInput_onStart(self):
+        from threading import Lock
+        self.mutex.acquire()
+        if(self.bIsRunning):
+            self.mutex.release()
+            return
+        self.bIsRunning = True
+        try:
+            if self.asr:
+                self.asr.setVisualExpression(self.getParameter("Visual expression"))
+                self.asr.pushContexts()
+            self.hasPushed = True
+            if self.asr:
+                self.asr.setVocabulary( self.getParameter("Word list").split(';'), self.getParameter("Enable word spotting") )
+            self.memory.subscribeToEvent("WordRecognized", self.getName(), "onWordRecognized")
+            self.hasSubscribed = True
+        except RuntimeError, e:
+            self.mutex.release()
+            self.onUnload()
+            raise e
+        self.mutex.release()
+
+    def onInput_onStop(self):
+        if( self.bIsRunning ):
+            self.onUnload()
+            self.onStopped()
+
+    def onWordRecognized(self, key, value, message):
+        if(len(value) > 1 and value[1] >= self.getParameter("Confidence threshold (%)")/100.):
+            self.wordRecognized(value[0]) #~ activate output of the box
+        else:
+            self.onNothing()]]>
+</content>
+                            </script>
+                            <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                            <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+                            <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                            <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="4" />
+                            <Output name="wordRecognized" type="3" type_size="1" nature="2" inner="0" tooltip="Word recognized with a confidence higher than the threshold set in the box parameters." id="5" />
+                            <Output name="onNothing" type="1" type_size="1" nature="2" inner="0" tooltip="Nothing has been understood." id="6" />
+                            <Parameter name="Word list" inherits_from_parent="0" content_type="3" value="A;a;aa;aal;aalii;aam;Aani;aardvark;aardwolf;Aaron;Aaronic;Aaronical;Aaronite;Aaronitic;Aaru;Ab;aba;Ababdeh;Ababua;abac;abaca;abacate;abacay;abacinate;abacination;abaciscus;abacist;aback;abactinal;abactinally;abaction;abactor;abaculus;abacus;Abadite;abaff;abaft;abaisance;abaiser;abaissed;abalienate;abalienation;abalone;Abama;abampere;abandon;abandonable;abandoned;abandonedly;abandonee;abandoner;abandonment;Abanic;Abantes;abaptiston;Abarambo;Abaris;abarthrosis;abarticular;abarticulation;abas;abase;abased;abasedly;abasedness;abasement;abaser;Abasgi;abash;abashed;abashedly;abashedness;abashless;abashlessly;abashment;abasia;abasic;abask;Abassin;abastardize;abatable;abate;abatement;abater;abatis;abatised;abaton;abator;abattoir;Abatua;abature;abave;abaxial;abaxile;abaze;abb;Abba;abbacomes;abbacy;Abbadide;abbas;abbasi;abbassi;Abbasside;abbatial;abbatical;abbess;abbey;abbeystede;Abbie;abbot;abbotcy;abbotnullius;abbotship;abbreviate;abbreviately;abbreviation;abbreviator;abbreviatory;abbreviature;Abby;abcoulomb;abdal;abdat;Abderian;Abderite;abdest;abdicable;abdicant;abdicate;abdication;abdicative;abdicator;Abdiel;abditive;abditory;abdomen;abdominal;Abdominales;abdominalian;abdominally;abdominoanterior;abdominocardiac;abdominocentesis;abdominocystic;abdominogenital;abdominohysterectomy;abdominohysterotomy;abdominoposterior;abdominoscope;abdominoscopy;abdominothoracic;abdominous;abdominovaginal;abdominovesical;abduce;abducens;abducent;abduct;abduction;abductor;Abe;abeam;abear;abearance;abecedarian;abecedarium;abecedary;abed;abeigh;Abel;abele;Abelia;Abelian;Abelicea;Abelite;abelite;Abelmoschus;abelmosk;Abelonian;abeltree;Abencerrages;abenteric;abepithymia;Aberdeen;aberdevine;Aberdonian;Aberia;aberrance;aberrancy;aberrant;aberrate;aberration;aberrational;aberrator;aberrometer;aberroscope;aberuncator;abet;abetment;abettal;abettor;abevacuation;abey;abeyance;abeyancy;abeyant;abfarad;abhenry;abhiseka;abhominable;abhor;abhorrence;abhorrency;abhorrent;abhorrently;abhorrer;abhorrible;abhorring;Abhorson;abidal;abidance;abide;abider;abidi;abiding;abidingly;abidingness;Abie;Abies;abietate;abietene;abietic;abietin;Abietineae;abietineous;abietinic;Abiezer;Abigail;abigail;abigailship;abigeat;abigeus;abilao;ability;abilla;abilo;abintestate;abiogenesis;abiogenesist;abiogenetic;abiogenetical;abiogenetically;abiogenist;abiogenous;abiogeny;abiological;abiologically;abiology;abiosis;abiotic;abiotrophic;abiotrophy;Abipon;abir;abirritant;abirritate;abirritation;abirritative;abiston;Abitibi;abiuret;abject;abjectedness;abjection;abjective;abjectly;abjectness;abjoint;abjudge;abjudicate;abjudication;abjunction;abjunctive;abjuration;abjuratory;abjure;abjurement;abjurer;abkar;abkari;Abkhas;Abkhasian;ablach;ablactate;ablactation;ablare;ablastemic;ablastous;ablate;ablation;ablatitious;ablatival;ablative;ablator;ablaut;ablaze;able;ableeze;ablegate;ableness;ablepharia;ablepharon;ablepharous;Ablepharus;ablepsia;ableptical;ableptically;abler;ablest;ablewhackets;ablins;abloom;ablow;ablude;abluent;ablush;ablution;ablutionary;abluvion;ably;abmho;Abnaki;abnegate;abnegation;abnegative;abnegator;Abner;abnerval;abnet;abneural;abnormal;abnormalism;abnormalist;abnormality;abnormalize;abnormally;abnormalness;abnormity;abnormous;abnumerable;Abo;aboard;Abobra;abode;abodement;abody;abohm;aboil;abolish;abolisher;abolishment;abolition;abolitionary;abolitionism;abolitionist;abolitionize;abolla;aboma;abomasum;abomasus;abominable;abominableness;abominably;abominate;abomination;abominator;abomine;Abongo;aboon;aborad;aboral;aborally;abord;aboriginal;aboriginality;aboriginally;aboriginary;aborigine;abort;aborted;aborticide;abortient;abortifacient;abortin;abortion;abortional;abortionist;abortive;abortively;abortiveness;abortus;abouchement;abound;abounder;abounding;aboundingly;about;abouts;above;aboveboard;abovedeck;aboveground;aboveproof;abovestairs;abox;abracadabra;abrachia;abradant;abrade;abrader;Abraham;Abrahamic;Abrahamidae;Abrahamite;Abrahamitic;abraid;Abram;Abramis;abranchial;abranchialism;abranchian;Abranchiata;abranchiate;abranchious;abrasax;abrase;abrash;abrasiometer;abrasion;abrasive;abrastol;abraum;abraxas;abreact;abreaction;abreast;abrenounce;abret;abrico;abridge;abridgeable;abridged;abridgedly;abridger;abridgment;abrim;abrin;abristle;abroach;abroad;Abrocoma;abrocome;abrogable;abrogate;abrogation;abrogative;abrogator;Abroma;Abronia;abrook;abrotanum;abrotine;abrupt;abruptedly;abruption;abruptly;abruptness;Abrus;Absalom;absampere;Absaroka;absarokite;abscess;abscessed;abscession;abscessroot;abscind;abscise;abscision;absciss;abscissa;abscissae;abscisse;abscission;absconce;abscond;absconded;abscondedly;abscondence;absconder;absconsa;abscoulomb;absence;absent;absentation;absentee;absenteeism;absenteeship;absenter;absently;absentment;absentmindedly;absentness;absfarad;abshenry;Absi;absinthe;absinthial;absinthian;absinthiate;absinthic;absinthin;absinthine;absinthism;absinthismic;absinthium;absinthol;absit;absmho;absohm;absolute;absolutely;absoluteness;absolution;absolutism;absolutist;absolutistic;absolutistically;absolutive;absolutization;absolutize;absolutory;absolvable;absolvatory;absolve;absolvent;absolver;absolvitor;absolvitory;absonant;absonous;absorb;absorbability;absorbable;absorbed;absorbedly;absorbedness;absorbefacient;absorbency;absorbent;absorber;absorbing;absorbingly;absorbition;absorpt;absorptance;absorptiometer;absorptiometric;absorption;absorptive;absorptively;absorptiveness;absorptivity;absquatulate;abstain;abstainer;abstainment;abstemious;abstemiously;abstemiousness;abstention;abstentionist;abstentious;absterge;abstergent;abstersion;abstersive;abstersiveness;abstinence;abstinency;abstinent;abstinential;abstinently;abstract;abstracted;abstractedly;abstractedness;abstracter;abstraction;abstractional;abstractionism;abstractionist;abstractitious;abstractive;abstractively;abstractiveness;abstractly;abstractness;abstractor;abstrahent;abstricted;abstriction;abstruse;abstrusely;abstruseness;abstrusion;abstrusity;absume;absumption;absurd;absurdity;absurdly;absurdness;absvolt;Absyrtus;abterminal;abthain;abthainrie;abthainry;abthanage;Abu;abu;abucco;abulia;abulic;abulomania;abuna;abundance;abundancy;abundant;Abundantia;abundantly;abura;aburabozu;aburban;aburst;aburton;abusable;abuse;abusedly;abusee;abuseful;abusefully;abusefulness;abuser;abusion;abusious;abusive;abusively;abusiveness;abut;Abuta;Abutilon;abutment;abuttal;abutter;abutting;abuzz;abvolt;abwab;aby;abysm;abysmal;abysmally;abyss;abyssal;Abyssinian;abyssobenthonic;abyssolith;abyssopelagic;acacatechin;acacatechol;acacetin;Acacia;Acacian;acaciin;acacin;academe;academial;academian;Academic;academic;academical;academically;academicals;academician;academicism;academism;academist;academite;academization;academize;Academus;academy;Acadia;acadialite;Acadian;Acadie;Acaena;acajou;acaleph;Acalepha;Acalephae;acalephan;acalephoid;acalycal;acalycine;acalycinous;acalyculate;Acalypha;Acalypterae;Acalyptrata;Acalyptratae;acalyptrate;Acamar;acampsia;acana;acanaceous;acanonical;acanth;acantha;Acanthaceae;acanthaceous;acanthad;Acantharia;Acanthia;acanthial;acanthin;acanthine;acanthion;acanthite;acanthocarpous;Acanthocephala;acanthocephalan;Acanthocephali;acanthocephalous;Acanthocereus;acanthocladous;Acanthodea;acanthodean;Acanthodei;Acanthodes;acanthodian;Acanthodidae;Acanthodii;Acanthodini;acanthoid;Acantholimon;acanthological;acanthology;acantholysis;acanthoma;Acanthomeridae;acanthon;Acanthopanax;Acanthophis;acanthophorous;acanthopod;acanthopodous;acanthopomatous;acanthopore;acanthopteran;Acanthopteri;acanthopterous;acanthopterygian;Acanthopterygii;acanthosis;acanthous;Acanthuridae;Acanthurus;acanthus;acapnia;acapnial;acapsular;acapu;acapulco;acara;Acarapis;acardia;acardiac;acari;acarian;acariasis;acaricidal;acaricide;acarid;Acarida;Acaridea;acaridean;acaridomatium;acariform;Acarina;acarine;acarinosis;acarocecidium;acarodermatitis;acaroid;acarol;acarologist;acarology;acarophilous;acarophobia;acarotoxic;acarpelous;acarpous;Acarus;Acastus;acatalectic;acatalepsia;acatalepsy;acataleptic;acatallactic;acatamathesia;acataphasia;acataposis;acatastasia;acatastatic;acate;acategorical;acatery;acatharsia;acatharsy;acatholic;acaudal;acaudate;acaulescent;acauline;acaulose;acaulous;acca;accede;accedence;acceder;accelerable;accelerando;accelerant;accelerate;accelerated;acceleratedly;acceleration;accelerative;accelerator;acceleratory;accelerograph;accelerometer;accend;accendibility;accendible;accension;accensor;accent;accentless;accentor;accentuable;accentual;accentuality;accentually;accentuate;accentuation;accentuator;accentus;accept;acceptability;acceptable;acceptableness;acceptably;acceptance;acceptancy;acceptant;acceptation;accepted;acceptedly;accepter;acceptilate;acceptilation;acception;acceptive;acceptor;acceptress;accerse;accersition;accersitor;access;accessarily;accessariness;accessary;accessaryship;accessibility;accessible;accessibly;accession;accessional;accessioner;accessive;accessively;accessless;accessorial;accessorily;accessoriness;accessorius;accessory;accidence;accidency;accident;accidental;accidentalism;accidentalist;accidentality;accidentally;accidentalness;accidented;accidential;accidentiality;accidently;accidia;accidie;accinge;accipient;Accipiter;accipitral;accipitrary;Accipitres;accipitrine;accismus;accite;acclaim;acclaimable;acclaimer;acclamation;acclamator;acclamatory;acclimatable;acclimatation;acclimate;acclimatement;acclimation;acclimatizable;acclimatization;acclimatize;acclimatizer;acclimature;acclinal;acclinate;acclivitous;acclivity;acclivous;accloy;accoast;accoil;accolade;accoladed;accolated;accolent;accolle;accombination;accommodable;accommodableness;accommodate;accommodately;accommodateness;accommodating;accommodatingly;accommodation;accommodational;accommodative;accommodativeness;accommodator;accompanier;accompaniment;accompanimental;accompanist;accompany;accompanyist;accompletive;accomplice;accompliceship;accomplicity;accomplish;accomplishable;accomplished;accomplisher;accomplishment;accomplisht;accompt;accord;accordable;accordance;accordancy;accordant;accordantly;accorder;according;accordingly;accordion;accordionist;accorporate;accorporation;accost;accostable;accosted;accouche;accouchement;accoucheur;accoucheuse;account;accountability;accountable;accountableness;accountably;accountancy;accountant;accountantship;accounting;accountment;accouple;accouplement;accouter;accouterment;accoy;accredit;accreditate;accreditation;accredited;accreditment;accrementitial;accrementition;accresce;accrescence;accrescent;accretal;accrete;accretion;accretionary;accretive;accroach;accroides;accrual;accrue;accruement;accruer;accubation;accubitum;accubitus;accultural;acculturate;acculturation;acculturize;accumbency;accumbent;accumber;accumulable;accumulate;accumulation;accumulativ;accumulative;accumulatively;accumulativeness;accumulator;accuracy;accurate;accurately;accurateness;accurse;accursed;accursedly;accursedness;accusable;accusably;accusal;accusant;accusation;accusatival;accusative;accusatively;accusatorial;accusatorially;accusatory;accusatrix;accuse;accused;accuser;accusingly;accusive;accustom;accustomed;accustomedly;accustomedness;ace;aceacenaphthene;aceanthrene;aceanthrenequinone;acecaffine;aceconitic;acedia;acediamine;acediast;acedy;Aceldama;Acemetae;Acemetic;acenaphthene;acenaphthenyl;acenaphthylene;acentric;acentrous;aceologic;aceology;acephal;Acephala;acephalan;Acephali;acephalia;Acephalina;acephaline;acephalism;acephalist;Acephalite;acephalocyst;acephalous;acephalus;Acer;Aceraceae;aceraceous;Acerae;Acerata;acerate;Acerates;acerathere;Aceratherium;aceratosis;acerb;Acerbas;acerbate;acerbic;acerbity;acerdol;acerin;acerose;acerous;acerra;acertannin;acervate;acervately;acervation;acervative;acervose;acervuline;acervulus;acescence;acescency;acescent;aceship;acesodyne;Acestes;acetabular;Acetabularia;acetabuliferous;acetabuliform;acetabulous;acetabulum;acetacetic;acetal;acetaldehydase;acetaldehyde;acetaldehydrase;acetalization;acetalize;acetamide;acetamidin;acetamidine;acetamido;acetaminol;acetanilid;acetanilide;acetanion;acetaniside;acetanisidide;acetannin;acetarious;acetarsone;acetate;acetated;acetation;acetbromamide;acetenyl;acethydrazide;acetic;acetification;acetifier;acetify;acetimeter;acetimetry;acetin;acetize;acetmethylanilide;acetnaphthalide;acetoacetanilide;acetoacetate;acetoacetic;acetoamidophenol;acetoarsenite;Acetobacter;acetobenzoic;acetobromanilide;acetochloral;acetocinnamene;acetoin;acetol;acetolysis;acetolytic;acetometer;acetometrical;acetometrically;acetometry;acetomorphine;acetonaphthone;acetonate;acetonation;acetone;acetonemia;acetonemic;acetonic;acetonitrile;acetonization;acetonize;acetonuria;acetonurometer;acetonyl;acetonylacetone;acetonylidene;acetophenetide;acetophenin;acetophenine;acetophenone;acetopiperone;acetopyrin;acetosalicylic;acetose;acetosity;acetosoluble;acetothienone;acetotoluide;acetotoluidine;acetous;acetoveratrone;acetoxime;acetoxyl;acetoxyphthalide;acetphenetid;acetphenetidin;acetract;acettoluide;acetum;aceturic;acetyl;acetylacetonates;acetylacetone;acetylamine;acetylate;acetylation;acetylator;acetylbenzene;acetylbenzoate;acetylbenzoic;acetylbiuret;acetylcarbazole;acetylcellulose;acetylcholine;acetylcyanide;acetylenation;acetylene;acetylenediurein;acetylenic;acetylenyl;acetylfluoride;acetylglycine;acetylhydrazine;acetylic;acetylide;acetyliodide;acetylizable;acetylization;acetylize;acetylizer;acetylmethylcarbinol;acetylperoxide;acetylphenol;acetylphenylhydrazine;acetylrosaniline;acetylsalicylate;acetylsalol;acetyltannin;acetylthymol;acetyltropeine;acetylurea;ach;Achaean;Achaemenian;Achaemenid;Achaemenidae;Achaemenidian;Achaenodon;Achaeta;achaetous;achage;Achagua;Achakzai;achalasia;Achamoth;Achango;achar;Achariaceae;Achariaceous;achate;Achates;Achatina;Achatinella;Achatinidae;ache;acheilia;acheilous;acheiria;acheirous;acheirus;Achen;achene;achenial;achenium;achenocarp;achenodium;acher;Achernar;Acheronian;Acherontic;Acherontical;achete;Achetidae;Acheulean;acheweed;achievable;achieve;achievement;achiever;achigan;achilary;achill;Achillea;Achillean;Achilleid;achilleine;Achillize;achillobursitis;achillodynia;achime;Achimenes;Achinese;aching;achingly;achira;Achitophel;achlamydate;Achlamydeae;achlamydeous;achlorhydria;achlorophyllous;achloropsia;Achmetha;acholia;acholic;Acholoe;acholous;acholuria;acholuric;Achomawi;achondrite;achondritic;achondroplasia;achondroplastic;achor;achordal;Achordata;achordate;Achorion;Achras;achree;achroacyte;Achroanthes;achrodextrin;achrodextrinase;achroglobin;achroiocythaemia;achroiocythemia;achroite;achroma;achromacyte;achromasia;achromat;achromate;Achromatiaceae;achromatic;achromatically;achromaticity;achromatin;achromatinic;achromatism;Achromatium;achromatizable;achromatization;achromatize;achromatocyte;achromatolysis;achromatope;achromatophile;achromatopia;achromatopsia;achromatopsy;achromatosis;achromatous;achromaturia;achromia;achromic;Achromobacter;Achromobacterieae;achromoderma;achromophilous;achromotrichia;achromous;achronical;achroodextrin;achroodextrinase;achroous;achropsia;achtehalber;achtel;achtelthaler;Achuas;achy;achylia;achylous;achymia;achymous;Achyranthes;Achyrodes;acichloride;acicula;acicular;acicularly;aciculate;aciculated;aciculum;acid;Acidanthera;Acidaspis;acidemia;acider;acidic;acidiferous;acidifiable;acidifiant;acidific;acidification;acidifier;acidify;acidimeter;acidimetric;acidimetrical;acidimetrically;acidimetry;acidite;acidity;acidize;acidly;acidness;acidoid;acidology;acidometer;acidometry;acidophile;acidophilic;acidophilous;acidoproteolytic;acidosis;acidosteophyte;acidotic;acidproof;acidulate;acidulent;acidulous;aciduric;acidyl;acier;acierage;Acieral;acierate;acieration;aciform;aciliate;aciliated;Acilius;acinaceous;acinaces;acinacifolious;acinaciform;acinar;acinarious;acinary;Acineta;Acinetae;acinetan;Acinetaria;acinetarian;acinetic;acinetiform;Acinetina;acinetinan;acinic;aciniform;acinose;acinotubular;acinous;acinus;Acipenser;Acipenseres;acipenserid;Acipenseridae;acipenserine;acipenseroid;Acipenseroidei;Acis;aciurgy;acker;ackey;ackman;acknow;acknowledge;acknowledgeable;acknowledged;acknowledgedly;acknowledger;aclastic;acle;acleidian;acleistous;Aclemon;aclidian;aclinal;aclinic;acloud;aclys;Acmaea;Acmaeidae;acmatic;acme;acmesthesia;acmic;Acmispon;acmite;acne;acneform;acneiform;acnemia;Acnida;acnodal;acnode;Acocanthera;acocantherin;acock;acockbill;acocotl;Acoela;Acoelomata;acoelomate;acoelomatous;Acoelomi;acoelomous;acoelous;Acoemetae;Acoemeti;Acoemetic;acoin;acoine;Acolapissa;acold;Acolhua;Acolhuan;acologic;acology;acolous;acoluthic;acolyte;acolythate;Acoma;acoma;acomia;acomous;aconative;acondylose;acondylous;acone;aconic;aconin;aconine;aconital;aconite;aconitia;aconitic;aconitin;aconitine;Aconitum;Acontias;acontium;Acontius;aconuresis;acopic;acopon;acopyrin;acopyrine;acor;acorea;acoria;acorn;acorned;Acorus;acosmic;acosmism;acosmist;acosmistic;acotyledon;acotyledonous;acouasm;acouchi;acouchy;acoumeter;acoumetry;acouometer;acouophonia;acoupa;acousmata;acousmatic;acoustic;acoustical;acoustically;acoustician;acousticolateral;Acousticon;acoustics;acquaint;acquaintance;acquaintanceship;acquaintancy;acquaintant;acquainted;acquaintedness;acquest;acquiesce;acquiescement;acquiescence;acquiescency;acquiescent;acquiescently;acquiescer;acquiescingly;acquirability;acquirable;acquire;acquired;acquirement;acquirenda;acquirer;acquisible;acquisite;acquisited;acquisition;acquisitive;acquisitively;acquisitiveness;acquisitor;acquisitum;acquist;acquit;acquitment;acquittal;acquittance;acquitter;Acrab;acracy;acraein;Acraeinae;acraldehyde;Acrania;acranial;acraniate;acrasia;Acrasiaceae;Acrasiales;Acrasida;Acrasieae;Acraspeda;acraspedote;acratia;acraturesis;acrawl;acraze;acre;acreable;acreage;acreak;acream;acred;Acredula;acreman;acrestaff;acrid;acridan;acridian;acridic;Acrididae;Acridiidae;acridine;acridinic;acridinium;acridity;Acridium;acridly;acridness;acridone;acridonium;acridophagus;acridyl;acriflavin;acriflavine;acrimonious;acrimoniously;acrimoniousness;acrimony;acrindoline;acrinyl;acrisia;Acrisius;Acrita;acritan;acrite;acritical;acritol;Acroa;acroaesthesia;acroama;acroamatic;acroamatics;acroanesthesia;acroarthritis;acroasphyxia;acroataxia;acroatic;acrobacy;acrobat;Acrobates;acrobatholithic;acrobatic;acrobatical;acrobatically;acrobatics;acrobatism;acroblast;acrobryous;acrobystitis;Acrocarpi;acrocarpous;acrocephalia;acrocephalic;acrocephalous;acrocephaly;Acrocera;Acroceratidae;Acroceraunian;Acroceridae;Acrochordidae;Acrochordinae;acrochordon;Acroclinium;Acrocomia;acroconidium;acrocontracture;acrocoracoid;acrocyanosis;acrocyst;acrodactylum;acrodermatitis;acrodont;acrodontism;acrodrome;acrodromous;Acrodus;acrodynia;acroesthesia;acrogamous;acrogamy;acrogen;acrogenic;acrogenous;acrogenously;acrography;Acrogynae;acrogynae;acrogynous;acrolein;acrolith;acrolithan;acrolithic;acrologic;acrologically;acrologism;acrologue;acrology;acromania;acromastitis;acromegalia;acromegalic;acromegaly;acromelalgia;acrometer;acromial;acromicria;acromioclavicular;acromiocoracoid;acromiodeltoid;acromiohumeral;acromiohyoid;acromion;acromioscapular;acromiosternal;acromiothoracic;acromonogrammatic;acromphalus;Acromyodi;acromyodian;acromyodic;acromyodous;acromyotonia;acromyotonus;acron;acronarcotic;acroneurosis;acronical;acronically;acronyc;acronych;Acronycta;acronyctous;acronym;acronymic;acronymize;acronymous;acronyx;acrook;acroparalysis;acroparesthesia;acropathology;acropathy;acropetal;acropetally;acrophobia;acrophonetic;acrophonic;acrophony;acropodium;acropoleis;acropolis;acropolitan;Acropora;acrorhagus;acrorrheuma;acrosarc;acrosarcum;acroscleriasis;acroscleroderma;acroscopic;acrose;acrosome;acrosphacelus;acrospire;acrospore;acrosporous;across;acrostic;acrostical;acrostically;acrostichal;Acrosticheae;acrostichic;acrostichoid;Acrostichum;acrosticism;acrostolion;acrostolium;acrotarsial;acrotarsium;acroteleutic;acroterial;acroteric;acroterium;Acrothoracica;acrotic;acrotism;acrotomous;Acrotreta;Acrotretidae;acrotrophic;acrotrophoneurosis;Acrux;Acrydium;acryl;acrylaldehyde;acrylate;acrylic;acrylonitrile;acrylyl;act;acta;actability;actable;Actaea;Actaeaceae;Actaeon;Actaeonidae;Actiad;Actian;actification;actifier;actify;actin;actinal;actinally;actinautographic;actinautography;actine;actinenchyma;acting;Actinia;actinian;Actiniaria;actiniarian;actinic;actinically;Actinidia;Actinidiaceae;actiniferous;actiniform;actinine;actiniochrome;actiniohematin;Actiniomorpha;actinism;Actinistia;actinium;actinobacillosis;Actinobacillus;actinoblast;actinobranch;actinobranchia;actinocarp;actinocarpic;actinocarpous;actinochemistry;actinocrinid;Actinocrinidae;actinocrinite;Actinocrinus;actinocutitis;actinodermatitis;actinodielectric;actinodrome;actinodromous;actinoelectric;actinoelectrically;actinoelectricity;actinogonidiate;actinogram;actinograph;actinography;actinoid;Actinoida;Actinoidea;actinolite;actinolitic;actinologous;actinologue;actinology;actinomere;actinomeric;actinometer;actinometric;actinometrical;actinometry;actinomorphic;actinomorphous;actinomorphy;Actinomyces;Actinomycetaceae;Actinomycetales;actinomycete;actinomycetous;actinomycin;actinomycoma;actinomycosis;actinomycotic;Actinomyxidia;Actinomyxidiida;actinon;Actinonema;actinoneuritis;actinophone;actinophonic;actinophore;actinophorous;actinophryan;Actinophrys;Actinopoda;actinopraxis;actinopteran;Actinopteri;actinopterous;actinopterygian;Actinopterygii;actinopterygious;actinoscopy;actinosoma;actinosome;Actinosphaerium;actinost;actinostereoscopy;actinostomal;actinostome;actinotherapeutic;actinotherapeutics;actinotherapy;actinotoxemia;actinotrichium;actinotrocha;actinouranium;Actinozoa;actinozoal;actinozoan;actinozoon;actinula;action;actionable;actionably;actional;actionary;actioner;actionize;actionless;Actipylea;Actium;activable;activate;activation;activator;active;actively;activeness;activin;activism;activist;activital;activity;activize;actless;actomyosin;acton;actor;actorship;actress;Acts;actu;actual;actualism;actualist;actualistic;actuality;actualization;actualize;actually;actualness;actuarial;actuarially;actuarian;actuary;actuaryship;actuation;actuator;acture;acturience;actutate;acuaesthesia;Acuan;acuate;acuation;Acubens;acuclosure;acuductor;acuesthesia;acuity;aculea;Aculeata;aculeate;aculeated;aculeiform;aculeolate;aculeolus;aculeus;acumen;acuminate;acumination;acuminose;acuminous;acuminulate;acupress;acupressure;acupunctuate;acupunctuation;acupuncturation;acupuncturator;acupuncture;acurative;acushla;acutangular;acutate;acute;acutely;acutenaculum;acuteness;acutiator;acutifoliate;Acutilinguae;acutilingual;acutilobate;acutiplantar;acutish;acutograve;acutonodose;acutorsion;acyanoblepsia;acyanopsia;acyclic;acyesis;acyetic;acyl;acylamido;acylamidobenzene;acylamino;acylate;acylation;acylogen;acyloin;acyloxy;acyloxymethane;acyrological;acyrology;acystia;ad;Ada;adactyl;adactylia;adactylism;adactylous;Adad;adad;adage;adagial;adagietto;adagio;Adai;Adaize;Adam;adamant;adamantean;adamantine;adamantinoma;adamantoblast;adamantoblastoma;adamantoid;adamantoma;adamas;Adamastor;adambulacral;adamellite;Adamhood;Adamic;Adamical;Adamically;adamine;Adamite;adamite;Adamitic;Adamitical;Adamitism;Adamsia;adamsite;adance;adangle;Adansonia;Adapa;adapid;Adapis;adapt;adaptability;adaptable;adaptation;adaptational;adaptationally;adaptative;adaptedness;adapter;adaption;adaptional;adaptionism;adaptitude;adaptive;adaptively;adaptiveness;adaptometer;adaptor;adaptorial;Adar;adarme;adat;adati;adatom;adaunt;adaw;adawe;adawlut;adawn;adaxial;aday;adays;adazzle;adcraft;add;Adda;adda;addability;addable;addax;addebted;added;addedly;addend;addenda;addendum;adder;adderbolt;adderfish;adderspit;adderwort;addibility;addible;addicent;addict;addicted;addictedness;addiction;Addie;addiment;Addisonian;Addisoniana;additament;additamentary;addition;additional;additionally;additionary;additionist;addititious;additive;additively;additivity;additory;addle;addlebrain;addlebrained;addlehead;addleheaded;addleheadedly;addleheadedness;addlement;addleness;addlepate;addlepated;addlepatedness;addleplot;addlings;addlins;addorsed;address;addressee;addresser;addressful;Addressograph;addressor;addrest;Addu;adduce;adducent;adducer;adducible;adduct;adduction;adductive;adductor;Addy;Ade;ade;adead;adeem;adeep;Adela;Adelaide;Adelarthra;Adelarthrosomata;adelarthrosomatous;Adelbert;Adelea;Adeleidae;Adelges;Adelia;Adelina;Adeline;adeling;adelite;Adeliza;adelocerous;Adelochorda;adelocodonic;adelomorphic;adelomorphous;adelopod;Adelops;Adelphi;Adelphian;adelphogamy;Adelphoi;adelpholite;adelphophagy;ademonist;adempted;ademption;adenalgia;adenalgy;Adenanthera;adenase;adenasthenia;adendric;adendritic;adenectomy;adenectopia;adenectopic;adenemphractic;adenemphraxis;adenia;adeniform;adenine;adenitis;adenization;adenoacanthoma;adenoblast;adenocancroid;adenocarcinoma;adenocarcinomatous;adenocele;adenocellulitis;adenochondroma;adenochondrosarcoma;adenochrome;adenocyst;adenocystoma;adenocystomatous;adenodermia;adenodiastasis;adenodynia;adenofibroma;adenofibrosis;adenogenesis;adenogenous;adenographer;adenographic;adenographical;adenography;adenohypersthenia;adenoid;adenoidal;adenoidism;adenoliomyofibroma;adenolipoma;adenolipomatosis;adenologaditis;adenological;adenology;adenolymphocele;adenolymphoma;adenoma;adenomalacia;adenomatome;adenomatous;adenomeningeal;adenometritis;adenomycosis;adenomyofibroma;adenomyoma;adenomyxoma;adenomyxosarcoma;adenoncus;adenoneural;adenoneure;adenopathy;adenopharyngeal;adenopharyngitis;adenophlegmon;Adenophora;adenophore;adenophorous;adenophthalmia;adenophyllous;adenophyma;adenopodous;adenosarcoma;adenosclerosis;adenose;adenosine;adenosis;adenostemonous;Adenostoma;adenotome;adenotomic;adenotomy;adenotyphoid;adenotyphus;adenyl;adenylic;Adeodatus;Adeona;Adephaga;adephagan;adephagia;adephagous;adept;adeptness;adeptship;adequacy;adequate;adequately;adequateness;adequation;adequative;adermia;adermin;Adessenarian;adet;adevism;adfected;adfix;adfluxion;adglutinate;Adhafera;adhaka;adhamant;Adhara;adharma;adhere;adherence;adherency;adherent;adherently;adherer;adherescence;adherescent;adhesion;adhesional;adhesive;adhesively;adhesivemeter;adhesiveness;adhibit;adhibition;adiabatic;adiabatically;adiabolist;adiactinic;adiadochokinesis;adiagnostic;adiantiform;Adiantum;adiaphon;adiaphonon;adiaphoral;adiaphoresis;adiaphoretic;adiaphorism;adiaphorist;adiaphoristic;adiaphorite;adiaphoron;adiaphorous;adiate;adiathermal;adiathermancy;adiathermanous;adiathermic;adiathetic;adiation;Adib;Adicea;adicity;Adiel;adieu;adieux;Adigei;Adighe;Adigranth;adigranth;Adin;Adinida;adinidan;adinole;adion;adipate;adipescent;adipic;adipinic;adipocele;adipocellulose;adipocere;adipoceriform;adipocerous;adipocyte;adipofibroma;adipogenic;adipogenous;adipoid;adipolysis;adipolytic;adipoma;adipomatous;adipometer;adipopexia;adipopexis;adipose;adiposeness;adiposis;adiposity;adiposogenital;adiposuria;adipous;adipsia;adipsic;adipsous;adipsy;adipyl;Adirondack;adit;adital;aditus;adjacency;adjacent;adjacently;adjag;adject;adjection;adjectional;adjectival;adjectivally;adjective;adjectively;adjectivism;adjectivitis;adjiger;adjoin;adjoined;adjoinedly;adjoining;adjoint;adjourn;adjournal;adjournment;adjudge;adjudgeable;adjudger;adjudgment;adjudicate;adjudication;adjudicative;adjudicator;adjudicature;adjunct;adjunction;adjunctive;adjunctively;adjunctly;adjuration;adjuratory;adjure;adjurer;adjust;adjustable;adjustably;adjustage;adjustation;adjuster;adjustive;adjustment;adjutage;adjutancy;adjutant;adjutantship;adjutorious;adjutory;adjutrice;adjuvant;Adlai;adlay;adless;adlet;Adlumia;adlumidine;adlumine;adman;admarginate;admaxillary;admeasure;admeasurement;admeasurer;admedial;admedian;admensuration;admi;adminicle;adminicula;adminicular;adminiculary;adminiculate;adminiculation;adminiculum;administer;administerd;administerial;administrable;administrant;administrate;administration;administrational;administrative;administratively;administrator;administratorship;administratress;administratrices;administratrix;admirability;admirable;admirableness;admirably;admiral;admiralship;admiralty;admiration;admirative;admirator;admire;admired;admiredly;admirer;admiring;admiringly;admissibility;admissible;admissibleness;admissibly;admission;admissive;admissory;admit;admittable;admittance;admitted;admittedly;admittee;admitter;admittible;admix;admixtion;admixture;admonish;admonisher;admonishingly;admonishment;admonition;admonitioner;admonitionist;admonitive;admonitively;admonitor;admonitorial;admonitorily;admonitory;admonitrix;admortization;adnascence;adnascent;adnate;adnation;adnephrine;adnerval;adneural;adnex;adnexal;adnexed;adnexitis;adnexopexy;adnominal;adnominally;adnomination;adnoun;ado;adobe;adolesce;adolescence;adolescency;adolescent;adolescently;Adolph;Adolphus;Adonai;Adonean;Adonia;Adoniad;Adonian;Adonic;adonidin;adonin;Adoniram;Adonis;adonite;adonitol;adonize;adoperate;adoperation;adopt;adoptability;adoptable;adoptant;adoptative;adopted;adoptedly;adoptee;adopter;adoptian;adoptianism;adoptianist;adoption;adoptional;adoptionism;adoptionist;adoptious;adoptive;adoptively;adorability;adorable;adorableness;adorably;adoral;adorally;adorant;Adorantes;adoration;adoratory;adore;adorer;Adoretus;adoringly;adorn;adorner;adorningly;adornment;adosculation;adossed;adoulie;adown;Adoxa;Adoxaceae;adoxaceous;adoxography;adoxy;adoze;adpao;adpress;adpromission;adradial;adradially;adradius;Adramelech;Adrammelech;adread;adream;adreamed;adreamt;adrectal;adrenal;adrenalectomize;adrenalectomy;Adrenalin;adrenaline;adrenalize;adrenalone;adrenergic;adrenin;adrenine;adrenochrome;adrenocortical;adrenocorticotropic;adrenolysis;adrenolytic;adrenotropic;Adrian;Adriana;Adriatic;Adrienne;adrift;adrip;adroit;adroitly;adroitness;adroop;adrop;adrostral;adrowse;adrue;adry;adsbud;adscendent;adscititious;adscititiously;adscript;adscripted;adscription;adscriptitious;adscriptitius;adscriptive;adsessor;adsheart;adsignification;adsignify;adsmith;adsmithing;adsorb;adsorbable;adsorbate;adsorbent;adsorption;adsorptive;adstipulate;adstipulation;adstipulator;adterminal;adtevac;adular;adularescence;adularia;adulate;adulation;adulator;adulatory;adulatress;Adullam;Adullamite;adult;adulter;adulterant;adulterate;adulterately;adulterateness;adulteration;adulterator;adulterer;adulteress;adulterine;adulterize;adulterous;adulterously;adultery;adulthood;adulticidal;adulticide;adultness;adultoid;adumbral;adumbrant;adumbrate;adumbration;adumbrative;adumbratively;adunc;aduncate;aduncated;aduncity;aduncous;adusk;adust;adustion;adustiosis;Advaita;advance;advanceable;advanced;advancedness;advancement;advancer;advancing;advancingly;advancive;advantage;advantageous;advantageously;advantageousness;advection;advectitious;advective;advehent;advene;advenience;advenient;Advent;advential;Adventism;Adventist;adventitia;adventitious;adventitiously;adventitiousness;adventive;adventual;adventure;adventureful;adventurement;adventurer;adventureship;adventuresome;adventuresomely;adventuresomeness;adventuress;adventurish;adventurous;adventurously;adventurousness;adverb;adverbial;adverbiality;adverbialize;adverbially;adverbiation;adversant;adversaria;adversarious;adversary;adversative;adversatively;adverse;adversely;adverseness;adversifoliate;adversifolious;adversity;advert;advertence;advertency;advertent;advertently;advertisable;advertise;advertisee;advertisement;advertiser;advertising;advice;adviceful;advisability;advisable;advisableness;advisably;advisal;advisatory;advise;advised;advisedly;advisedness;advisee;advisement;adviser;advisership;advisive;advisiveness;advisor;advisorily;advisory;advocacy;advocate;advocateship;advocatess;advocation;advocator;advocatory;advocatress;advocatrice;advocatrix;advolution;advowee;advowson;ady;adynamia;adynamic;adynamy;adyta;adyton;adytum;adz;adze;adzer;adzooks;ae;Aeacides;Aeacus;Aeaean;Aechmophorus;aecial;Aecidiaceae;aecidial;aecidioform;Aecidiomycetes;aecidiospore;aecidiostage;aecidium;aeciospore;aeciostage;aecioteliospore;aeciotelium;aecium;aedeagus;Aedes;aedicula;aedile;aedileship;aedilian;aedilic;aedilitian;aedility;aedoeagus;aefald;aefaldness;aefaldy;aefauld;aegagropila;aegagropile;aegagrus;Aegean;aegerian;aegeriid;Aegeriidae;Aegialitis;aegicrania;Aegina;Aeginetan;Aeginetic;Aegipan;aegirine;aegirinolite;aegirite;aegis;Aegisthus;Aegithalos;Aegithognathae;aegithognathism;aegithognathous;Aegle;Aegopodium;aegrotant;aegyptilla;aegyrite;aeluroid;Aeluroidea;aelurophobe;aelurophobia;aeluropodous;aenach;aenean;aeneolithic;aeneous;aenigmatite;aeolharmonica;Aeolia;Aeolian;Aeolic;Aeolicism;aeolid;Aeolidae;Aeolididae;aeolina;aeoline;aeolipile;Aeolis;Aeolism;Aeolist;aeolistic;aeolodicon;aeolodion;aeolomelodicon;aeolopantalon;aeolotropic;aeolotropism;aeolotropy;aeolsklavier;aeon;aeonial;aeonian;aeonist;Aepyceros;Aepyornis;Aepyornithidae;Aepyornithiformes;Aequi;Aequian;Aequiculi;Aequipalpia;aequoreal;aer;aerage;aerarian;aerarium;aerate;aeration;aerator;aerenchyma;aer" default_value="yes;no" custom_choice="0" tooltip="Try to recognize a word from a list of words set in the box parameters." id="7" />
+                            <Parameter name="Confidence threshold (%)" inherits_from_parent="0" content_type="1" value="84" default_value="30" min="0" max="100" tooltip="If the confidence associated with the word recognized is below this threshold, the robot will consider that it is not recognized." id="8" />
+                            <Parameter name="Visual expression" inherits_from_parent="0" content_type="0" value="1" default_value="1" tooltip="Use the LEDs to show feedbacks from the robot during the recognition.&#x0A;&#x0A;For example:&#x0A;- Eyes leds get blue and turn when the speech recognition is launched.&#x0A;- They get yellow when the robot hears someone talking and analyses what it heard.&#x0A;- They flash in green when the robot understood and flash in red otherwise." id="9" />
+                            <Parameter name="Enable word spotting" inherits_from_parent="0" content_type="0" value="0" default_value="0" tooltip="If this option is not activated the robot will only understand exact expressions. If it is, he will spot the exact expressions even in the middle of a sentence.&#x0A;&#x0A;!!Warning!! This option is only available with the speech recognition module using Nuance (ie in Atom version of the robot)." id="10" />
+                            <Resource name="Speech recognition" type="Lock" timeout="0" />
+                        </Box>
+                        <Link inputowner="3" indexofinput="2" outputowner="1" indexofoutput="4" />
+                        <Link inputowner="4" indexofinput="2" outputowner="0" indexofoutput="2" />
+                        <Link inputowner="1" indexofinput="2" outputowner="4" indexofoutput="5" />
+                        <Link inputowner="4" indexofinput="2" outputowner="3" indexofoutput="4" />
+                    </Diagram>
+                </BehaviorKeyframe>
+            </BehaviorLayer>
+        </Timeline>
+    </Box>
+</ChoregrapheProject>
